@@ -1,0 +1,58 @@
+[
+  {
+    "clickup_task_id": "dch7qr",
+    "sale_date": "Wednesday, February 20th 2019",
+    "payment_reference": "H6D-L2MK-G&QW0",
+    "payment_frequency": "Monthly",
+    "renewal_frequency": 1,
+    "hubspot_deal_id": 14788256514
+  },
+  {
+    "clickup_task_id": "dchfpb",
+    "sale_date": "Friday, September 8th 2017",
+    "payment_reference": "XN9-MB6ZV-KJFO",
+    "payment_frequency": "Yearly",
+    "renewal_frequency": 1,
+    "hubspot_deal_id": 14788421422
+  },
+  {
+    "clickup_task_id": "dchqyw",
+    "sale_date": "Wednesday, April 12th 2017",
+    "payment_reference": "U4P-BGK3XJ6T-1",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788260446
+  },
+  {
+    "clickup_task_id": "3ex5ug",
+    "sale_date": "Monday, March 15th 2021",
+    "payment_reference": "W9V-F6QODT7&KI",
+    "payment_frequency": "Monthly",
+    "renewal_frequency": 1,
+    "hubspot_deal_id": 14788228017
+  },
+  {
+    "clickup_task_id": "z74ngc",
+    "sale_date": "Friday, August 21st 2020",
+    "payment_reference": "2ENWPLKJ-D7YO4",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788280955
+  },
+  {
+    "clickup_task_id": "z74nk2",
+    "sale_date": "Thursday, December 15th 2016",
+    "payment_reference": "CQZ9O2KX-FW6NS",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788327187
+  },
+  {
+    "clickup_task_id": "z74nkq",
+    "sale_date": "Tuesday, November 14th 2017",
+    "payment_reference": "P1YWQHOCS4-5FB",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788327186
+  }
+]
