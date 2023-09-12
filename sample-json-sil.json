@@ -54,5 +54,13 @@
     "payment_frequency": "6 Monthly",
     "renewal_frequency": 2,
     "hubspot_deal_id": 14788327186
+  },
+  {
+    "clickup_task_id": "z74nky",
+    "sale_date": "Friday, November 20th 2020",
+    "payment_reference": "J7P-9STZ-N&CQ2WFFRDX-YA1EUXH0B-VGWLOOMV-ZIK3",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788297383
   }
 ]

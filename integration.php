@@ -103,86 +103,6 @@ function formatDateForHubSpot($dateTimeString) {
     return $dateTime->format('Y-m-d\TH:i:s\Z');
 }
 
-// Get all deals the under Ezidebit Pipeline from HubSpot API
-function get_all_deals_under_ezidebit_pipeline() {
-    // HubSpot API endpoint for searching deals
-    $endpoint = "https://api.hubapi.com/crm/v3/objects/deals/search";
-    // Your HubSpot API Key
-    $apiKey = "pat-na1-e1f175c0-93c4-42d7-9135-d2d2ecbc743d";
-    // Pipeline ID you want to filter by
-    $pipelineId = "48080722";
-    $allDeals = array(); // To store all deals
-    // Function to fetch deals
-    function fetchDeals($endpoint, $apiKey, $pipelineId, $after = null) {
-        $data = array(
-            "filterGroups" => array(
-                array(
-                    "filters" => array(
-                        array(
-                            "propertyName" => "pipeline",
-                            "operator" => "EQ",
-                            "value" => $pipelineId
-                        )
-                    )
-                )
-            ),
-            "properties" => array("amount", "ezidebit_payer_id", "closedate", "order_status", "createdAt", "updatedAt")
-        );
-        if ($after) {
-            $data['after'] = $after;
-        }
-        $curl = curl_init();
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => $endpoint,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => "POST",
-            CURLOPT_POSTFIELDS => json_encode($data),
-            CURLOPT_HTTPHEADER => array(
-                'Authorization: Bearer ' . $apiKey,
-                'Content-Type: application/json'
-            ),
-        ));
-        $response = curl_exec($curl);
-        curl_close($curl);
-        return json_decode($response, true);
-    }
-    // Initial fetch
-    $data = fetchDeals($endpoint, $apiKey, $pipelineId);
-    // Loop through paging
-    while ($data && isset($data['results'])) {
-        $deals = $data['results'];
-        foreach ($deals as $deal) {
-            $allDeals[] = $deal; // Store the deal
-        }
-        if (isset($data['paging']['next']['after'])) {
-            $after = $data['paging']['next']['after'];
-            $data = fetchDeals($endpoint, $apiKey, $pipelineId, $after);
-        } else {
-            break; // No more results, exit the loop
-        }
-    }
-    // Display the fetched deals
-    foreach ($allDeals as $deal) {
-        $dealID = $deal['id'];
-        $amount = $deal['properties']['amount'];
-        $totalAmountPaid = $deal['properties']['amount'];
-        $ezidebitTransactionID = $deal['properties']['ezidebit_payer_id'];
-        $closeDate = $deal['properties']['closedate'];
-        $paymentStatus = $deal['properties']['order_status'];
-        $createdAt = $deal['createdAt'];
-        $updatedAt = $deal['updatedAt'];
-        // Check if the deal with this hubspot_deal_id already exists
-        if (!deal_exists_by_hubspot_id($dealID)) {
-            // Insert deal data into wp_deals_info table
-            insert_hubspot_deal_data( $dealID,$amount,$totalAmountPaid,$ezidebitTransactionID,$closeDate,$paymentStatus, $createdAt, $updatedAt );
-        }
-    }
-    if (empty($allDeals)) {
-        echo "No deals found.";
-    }
-    return $allDeals; // Return the fetched deals
-}
-
 function syncDateTimeStamps() {
     // Assuming you have the JSON file in the theme folder
     $json_file_path = __DIR__ . './sample-json-sil.json';
@@ -237,6 +157,7 @@ function processEzidebitPayments() {
         $payment_reference = $data['payment_reference'];
         // Check if payment data exists for this reference
         if (isset($payment_data[$payment_reference])) {
+            $ezidebit_transaction_id = $payment_data[$payment_reference]['EzidebitCustomerID'];
             $payment_amount = $payment_data[$payment_reference]['PaymentAmount'];
             $payment_status = $payment_data[$payment_reference]['PaymentStatus'];
             $originalDate = $data['sale_date'];
@@ -372,7 +293,7 @@ function processEzidebitPayments() {
             $wpdb->insert(
                 $table_name,
                 array(
-                    'ezidebit_transaction_id' => $ezidebit_payer_id,
+                    'ezidebit_transaction_id' => $ezidebit_transaction_id,
                     'clickup_task_id' => $data['clickup_task_id'],
                     'hubspot_deal_id' => $data['hubspot_deal_id'],
                     'sale_date' => $formattedDate,
