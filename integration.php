@@ -66,10 +66,22 @@ function manually_insert_to_wp_deals_info() {
         <div class="container">
             <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
                 <strong class="mb-0">Contracts Updated!</strong>
+                <p>Timestamps in wp_deals_info successfully updated with the ones from HubSpot API.</p>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         </div>';
     }
+    if ( isset( $_POST['update_hubspot_on_wpdb_change'] ) ) {
+        updateHubSpotDealsBasedOnDatabase();
+        echo '
+        <div class="container">
+            <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+                <strong class="mb-0">HubSpot Deals Updated!</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>';
+    }
+    ezidebitPaymentsFromThreeDaysAgo();
     display_deals_widget();
 }
 
@@ -192,16 +204,13 @@ function processEzidebitPayments() {
                     // Handle invalid renewal frequency here
                     break;
             }
-            // Adjust the next renewal date for the current year
             $currentYear = $today->format('Y');
             if ($nextRenewalDate !== null) {
                 $nextRenewalDate->setDate($currentYear, $nextRenewalDate->format('m'), $nextRenewalDate->format('d'));
-                // If the next renewal date is in the past, adjust for the next year
                 if ($nextRenewalDate < $today) {
                     $nextRenewalDate->modify('+1 year');
                 }
             }
-            // Calculate total payments in the contract based on payment frequency
             $paymentFrequency = $data['payment_frequency'];
             $totalPayments = 0;
             if ($nextRenewalDate !== null) {
@@ -215,20 +224,16 @@ function processEzidebitPayments() {
                         $totalPayments = floor($monthsBetweenDates / 6);
                         break;
                     case 'Yearly':
-                        // Calculate the number of years until the next payment
                         $yearsToNextPayment = $interval->format('%y');
-                        // Check if the next payment date is in the future
                         if ($yearsToNextPayment > 0 || $interval->format('%m') > 0 || $interval->format('%d') > 0) {
-                            $totalPayments = 1; // There is a payment due in the future
+                            $totalPayments = 1;
                         }
                         $totalPayments = $yearsToNextPayment;
                         break;
                     case 'Quarterly':
-                        // Calculate the number of quarters until the next payment
                         $quartersToNextPayment = ceil($monthsBetweenDates / 3);
-                        // Check if the next payment date is in the future
                         if ($quartersToNextPayment > 0) {
-                            $totalPayments = $quartersToNextPayment; // Number of quarters remaining
+                            $totalPayments = $quartersToNextPayment;
                         }
                         break;
                     default:
@@ -236,7 +241,6 @@ function processEzidebitPayments() {
                         break;
                 }
             }
-            // Calculate payments left based on the payment frequency and current date
             $paymentsLeft = 0;
             if ($nextRenewalDate !== null) {
                 $interval = $today->diff($nextRenewalDate);
@@ -245,29 +249,28 @@ function processEzidebitPayments() {
                 switch ($paymentFrequency) {
                     case 'Monthly':
                         $paymentsLeft = $monthsToNextRenewal;
+                        if ($interval->format('%d') > 0) {
+                            $paymentsLeft++;
+                        }
                         break;
                     case '6 Monthly':
-                        // Calculate the number of months until the next payment
-                        $monthsToNextPayment = $yearsToNextPayment * 12 + $monthsToNextPayment;
-                        // Check if the next payment date is in the future
-                        if ($monthsToNextPayment > 0) {
-                            $paymentsLeft = 1; // There is a payment due in the future
+                        $interval = $today->diff($nextRenewalDate);
+                        $yearsToNextPayment = $interval->format('%y');
+                        $monthsToNextPayment = $yearsToNextPayment * 12 + $interval->format('%m');
+                        if ($monthsToNextPayment > 0 || $interval->format('%d') > 0) {
+                            $paymentsLeft = 1;
                         }
                         break;
                     case 'Yearly':
-                        // Calculate the number of years until the next payment
                         $yearsToNextPayment = $interval->format('%y');
-                        // Check if the next payment date is in the future
                         if ($yearsToNextPayment > 0 || $interval->format('%m') > 0 || $interval->format('%d') > 0) {
-                            $paymentsLeft = 1; // There is a payment due in the future
+                            $paymentsLeft = 1;
                         }
                         break;
                     case 'Quarterly':
-                        // Calculate the number of quarters until the next payment
                         $quartersToNextPayment = ceil($monthsToNextRenewal / 3);
-                        // Check if the next payment date is in the future
-                        if ($quartersToNextPayment > 0) {
-                            $paymentsLeft = $quartersToNextPayment; // Number of quarters remaining
+                        if ($quartersToNextPayment > 0 || $interval->format('%d') > 0) {
+                            $paymentsLeft = $quartersToNextPayment;
                         }
                         break;
                     default:
@@ -275,13 +278,11 @@ function processEzidebitPayments() {
                         break;
                 }
             }
-            // Format the renewal_date column in the database shown in the menu page table
             $renewalDate = ($nextRenewalDate !== null) ? $nextRenewalDate->format('Y-m-d') : null;
-            // Get the total_amount_paid by multiplying the amount paid to the number of total payments in the contract
+            // total_amount_paid value
             $totalAmountToPayInContract = $payment_amount * $totalPayments;
-            // Get the total_amount_left by multiplying the amount paid to the number of payments left in the contract then getting the difference from the total_amount_paid
-            $amountLeftToPayInContract = $payment_amount * $paymentsLeft;
-            $totalAmountLeftToPayInContract = $totalAmountToPayInContract - $amountLeftToPayInContract;
+            // total_amount_left value
+            $totalAmountLeftToPayInContract = $payment_amount * $paymentsLeft;
             // Determine the increment value based on the payment status
             $increment_successful_payments = ($payment_status == 'S') ? 1 : 0;
             $increment_failed_payments = ($payment_status == 'F') ? 1 : 0;
@@ -483,6 +484,229 @@ function updateTimestampsInWordPress($hubspotDealId, $createdAt, $updatedAt) {
     );
 }
 
+function updateHubSpotDealsBasedOnDatabase() {
+    // Retrieve data from the WordPress database (wp_deals_info)
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'deals_info';
+    $query = "SELECT hubspot_deal_id, renewal_date, sale_date, amount, payment_frequency, renewal_frequency,number_payments_in_contract, number_payments_left_in_contract, total_amount_paid, total_amount_left FROM $table_name";
+    $results = $wpdb->get_results($query, ARRAY_A);
+    // Initialize an array to store deal updates
+    $dealUpdates = [];
+    foreach ($results as $row) {
+        $hubspotDealId = $row['hubspot_deal_id'];
+        $renewalDateDatabase = $row['renewal_date'];
+        $saleDate = $row['sale_date'];
+        $amount = $row['amount'];
+        $paymentFrequency = $row['payment_frequency'];
+        $renewalFrequency = $row['renewal_frequency'];
+        $numPaymentsInContract = $row['number_payments_in_contract'];
+        $numPaymentsLeftInContract = $row['number_payments_left_in_contract'];
+        $totalAmountPaid = $row['total_amount_paid'];
+        $totalAmountLeft = $row['total_amount_left'];
+        // Check if the renewal date has been reached
+        $today = new DateTime();
+        $renewalDate = new DateTime($renewalDateDatabase);
+        // $testToday = new DateTime("2025-02-20");
+        if ($today >= $renewalDate) {
+            // Calculate the next renewal date based on renewal frequency
+            $nextRenewalDate = new DateTime($saleDate);
+            switch ($renewalFrequency) {
+                case 1: // Yearly
+                    $nextRenewalDate->modify('+1 year');
+                    break;
+                case 2: // 6 monthly
+                    $nextRenewalDate->modify('+6 months');
+                    break;
+                case 4: // Quarterly (every 3 months)
+                    $nextRenewalDate->modify('+3 months');
+                    break;
+                case 0: // One-time only payment
+                    $nextRenewalDate = null;
+                    break;
+                case 6: // Every 2 months
+                    $nextRenewalDate->modify('+2 months');
+                    break;
+                case 12: // Monthly
+                    $nextRenewalDate->modify('+1 month');
+                    break;
+                default:
+                    // Handle invalid renewal frequency here
+                    break;
+            }
+            $currentYear = $today->format('Y');
+            if ($nextRenewalDate !== null) {
+                $nextRenewalDate->setDate($currentYear, $nextRenewalDate->format('m'), $nextRenewalDate->format('d'));
+                if ($nextRenewalDate < $today) {
+                    $nextRenewalDate->modify('+1 year');
+                }
+            }
+            $totalPayments = 0;
+            if ($nextRenewalDate !== null) {
+                // Create DateTime objects from the date strings
+                $saleDateFix = new DateTime($saleDate);
+                $interval = $saleDateFix->diff($nextRenewalDate);
+                $monthsBetweenDates = $interval->format('%y') * 12 + $interval->format('%m');
+                switch ($paymentFrequency) {
+                    case 'Monthly':
+                        $totalPayments = $monthsBetweenDates;
+                        break;
+                    case '6 Monthly':
+                        $totalPayments = floor($monthsBetweenDates / 6);
+                        break;
+                    case 'Yearly':
+                        $yearsToNextPayment = $interval->format('%y');
+                        if ($yearsToNextPayment > 0 || $interval->format('%m') > 0 || $interval->format('%d') > 0) {
+                            $totalPayments = 1;
+                        }
+                        $totalPayments = $yearsToNextPayment;
+                        break;
+                    case 'Quarterly':
+                        $quartersToNextPayment = ceil($monthsBetweenDates / 3);
+                        if ($quartersToNextPayment > 0) {
+                            $totalPayments = $quartersToNextPayment;
+                        }
+                        break;
+                    default:
+                        // Handle invalid payment frequency here
+                        break;
+                }
+            }
+            $paymentsLeft = 0;
+            if ($nextRenewalDate !== null) {
+                $interval = $today->diff($nextRenewalDate);
+                $monthsToNextRenewal = $interval->format('%y') * 12 + $interval->format('%m');
+                $monthsToNextPayment = $interval->format('%m');
+                switch ($paymentFrequency) {
+                    case 'Monthly':
+                        $paymentsLeft = $monthsToNextRenewal;
+                        if ($interval->format('%d') > 0) {
+                            $paymentsLeft++;
+                        }
+                        break;
+                    case '6 Monthly':
+                        $interval = $today->diff($nextRenewalDate);
+                        $yearsToNextPayment = $interval->format('%y');
+                        $monthsToNextPayment = $yearsToNextPayment * 12 + $interval->format('%m');
+                        if ($monthsToNextPayment > 0 || $interval->format('%d') > 0) {
+                            $paymentsLeft = 1;
+                        }
+                        break;
+                    case 'Yearly':
+                        $yearsToNextPayment = $interval->format('%y');
+                        if ($yearsToNextPayment > 0 || $interval->format('%m') > 0 || $interval->format('%d') > 0) {
+                            $paymentsLeft = 1;
+                        }
+                        break;
+                    case 'Quarterly':
+                        $quartersToNextPayment = ceil($monthsToNextRenewal / 3);
+                        if ($quartersToNextPayment > 0 || $interval->format('%d') > 0) {
+                            $paymentsLeft = $quartersToNextPayment;
+                        }
+                        break;
+                    default:
+                        // Handle invalid payment frequency here
+                        break;
+                }
+            }
+            // Recalculate total_amount_paid and total_amount_left
+            $totalAmountPaid = $amount * $totalPayments;
+            $totalAmountLeft = $amount * $paymentsLeft;
+            // Update the values in the WordPress database
+            $wpdb->update(
+                $table_name,
+                array(
+                    'renewal_date' => $nextRenewalDate ? $nextRenewalDate->format('Y-m-d') : null,
+                    'number_payments_in_contract' => $totalPayments,
+                    'number_payments_left_in_contract' => $paymentsLeft,
+                    'total_amount_paid' => $totalAmountPaid,
+                    'total_amount_left' => $totalAmountLeft,
+                ),
+                array('hubspot_deal_id' => $hubspotDealId)
+            );
+            // Update the deal properties in HubSpot
+            $dealUpdate = [
+                'id' => $hubspotDealId,
+                'properties' => [
+                    'number_payments_in_contract' => $totalPayments,
+                    'number_payments_left_in_contract' => $paymentsLeft,
+                    'total_amount_paid' => $totalAmountPaid,
+                    'total_amount_left' => $totalAmountLeft,
+                    'renewal_date' => $nextRenewalDate ? $nextRenewalDate->format('Y-m-d') : null,
+                    'regular_debit_amount__inc_gst_' => $amount,
+                ],
+            ];
+            $dealUpdates[] = $dealUpdate;
+        }
+    }
+    // Update the deals in HubSpot
+    updateHubSpotDeals($dealUpdates);
+}
+
+function makeHubSpotAPIRequest($endpoint, $method = 'GET', $data = null) {
+    // Replace with your HubSpot API key or OAuth token
+    $apiKey = 'pat-na1-e1f175c0-93c4-42d7-9135-d2d2ecbc743d';
+    // Create cURL handle
+    $ch = curl_init();
+    // Set cURL options
+    $curlOptions = array(
+        CURLOPT_URL => $endpoint,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => array(
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json',
+        ),
+    );
+    if ($method === 'POST' && $data !== null) {
+        $curlOptions[CURLOPT_CUSTOMREQUEST] = 'POST';
+        $curlOptions[CURLOPT_POSTFIELDS] = json_encode($data);
+    }
+    curl_setopt_array($ch, $curlOptions);
+    // Execute cURL request
+    $response = curl_exec($ch);
+    // Check for cURL errors
+    if (curl_errno($ch)) {
+        echo 'cURL Error: ' . curl_error($ch);
+        return false;
+    }
+    // Close cURL handle
+    curl_close($ch);
+    // Parse the JSON response
+    $responseData = json_decode($response, true);
+    if (isset($responseData)) {
+        return $responseData; // Return the response data
+    } else {
+        echo 'Error making HubSpot API request. Response: ' . $response;
+        return false;
+    }
+}
+
+function ezidebitPaymentsFromThreeDaysAgo() {
+    // Get the current date
+    $currentDate = date('Y-m-d');
+    // Calculate the date 3 days before the current date
+    $threeDaysAgo = date('Y-m-d', strtotime('-3 days', strtotime($currentDate)));
+    $client = new SoapClient('https://api.demo.ezidebit.com.au/v3-5/nonpci?singleWsdl');
+    $ezidebit_response = $client->GetPayments([
+        'DigitalKey' => '143F8E3D-D734-472B-9E9E-DC37B4DA59E0',
+        'PaymentType' => 'ALL',
+        'PaymentMethod' => 'ALL',
+        'PaymentSource' => 'ALL',
+        'DateFrom' => $threeDaysAgo,
+        'DateTo' => $currentDate
+    ]);
+    // Check if the Ezidebit API call was successful
+    if ($ezidebit_response && isset($ezidebit_response->GetPaymentsResult->Data->Payment)) {
+        $payments = $ezidebit_response->GetPaymentsResult->Data->Payment;
+        return array(
+            'EzidebitCustomerID' => $payments->EzidebitCustomerID,
+            'PaymentAmount' => $payments->PaymentAmount,
+            'PaymentStatus' => $payments->PaymentStatus,
+        );
+    } else {
+        return false; // API call failed or response format is not as expected
+    }
+}
+
 function display_deals_widget() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'deals_info';
@@ -498,15 +722,16 @@ function display_deals_widget() {
                     <div class="col-6">
                         <h2 class="mt-4">Update HubSpot Deals</h2>
                         <form method="post" action="">
-                            <p>Click the button below to update HubSpot deals that are already present in the Contracts Information table</p>
+                            <p>Update HubSpot deals that are already present in the Contracts Information table or update deal properties from this table.</p>
                             <input type="submit" name="update_deals" class="btn btn-primary mb-3" value="Update Deals">
+                            <input type="submit" name="update_hubspot_on_wpdb_change" class="btn btn-outline-primary mb-3" value="Sync to HubSpot">
                         </form> 
                     </div>
                     <div class="col-6">
-                        <h2 class="mt-4">Sync Contracts with HubSpot</h2>
+                        <h2 class="mt-4">Sync Contracts From HubSpot</h2>
                         <form method="post" action="">
                             <p>Click the button below to sync the timestamps of your contracts with the ones from HubSpot.</p>
-                            <input type="submit" name="sync_contracts" class="btn btn-primary mb-3" value="Sync Contracts">
+                            <input type="submit" name="sync_contracts" class="btn btn-primary mb-3" value="Update Contracts">
                         </form> 
                     </div>
                 </div>
@@ -527,8 +752,8 @@ function display_deals_widget() {
             echo '<th scope="col">Payments Left in Contract</th>';
             echo '<th scope="col">Sale Date</th>';
             echo '<th scope="col">Renewal Date</th>';
-            echo '<th scope="col">Total Amount Paid</th>';
-            echo '<th scope="col">Total Amount Left</th>';
+            echo '<th scope="col">Amount To Pay</th>';
+            echo '<th scope="col">Amount Left To Pay</th>';
             echo '<th scope="col">Failed Payments</th>';
             echo '<th scope="col">Successful Payments</th>';
             echo '<th scope="col">Status</th>';
