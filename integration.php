@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: SIL Ezidebit-WPDB-HubSpot Integration
- * Description: A custom plugin that makes API calls to Ezidebit, saves the necessary data to the deals info table in the wordpress database, and can update deals that also exist in HubSpot.
+ * Description: Make API Requests to the Ezidebit API, Insert into the Wordpress Database, Update Deals in HubSpot.
  * Version: 1.0
  * Author: Allan Concepcion
  */
@@ -81,7 +81,13 @@ function manually_insert_to_wp_deals_info() {
             </div>
         </div>';
     }
-    ezidebitPaymentsFromThreeDaysAgo();
+    // $result = ezidebitPaymentsFromThreeDaysAgo();
+    // if ($result !== false) {
+    //     echo "API Response:\n";
+    //     print_r($result); // or var_dump($result);
+    // } else {
+    //     echo "API call failed or response format is not as expected.\n";
+    // }
     display_deals_widget();
 }
 
@@ -642,43 +648,43 @@ function updateHubSpotDealsBasedOnDatabase() {
     updateHubSpotDeals($dealUpdates);
 }
 
-function makeHubSpotAPIRequest($endpoint, $method = 'GET', $data = null) {
-    // Replace with your HubSpot API key or OAuth token
-    $apiKey = 'pat-na1-e1f175c0-93c4-42d7-9135-d2d2ecbc743d';
-    // Create cURL handle
-    $ch = curl_init();
-    // Set cURL options
-    $curlOptions = array(
-        CURLOPT_URL => $endpoint,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => array(
-            'Authorization: Bearer ' . $apiKey,
-            'Content-Type: application/json',
-        ),
-    );
-    if ($method === 'POST' && $data !== null) {
-        $curlOptions[CURLOPT_CUSTOMREQUEST] = 'POST';
-        $curlOptions[CURLOPT_POSTFIELDS] = json_encode($data);
-    }
-    curl_setopt_array($ch, $curlOptions);
-    // Execute cURL request
-    $response = curl_exec($ch);
-    // Check for cURL errors
-    if (curl_errno($ch)) {
-        echo 'cURL Error: ' . curl_error($ch);
-        return false;
-    }
-    // Close cURL handle
-    curl_close($ch);
-    // Parse the JSON response
-    $responseData = json_decode($response, true);
-    if (isset($responseData)) {
-        return $responseData; // Return the response data
-    } else {
-        echo 'Error making HubSpot API request. Response: ' . $response;
-        return false;
-    }
-}
+// function makeHubSpotAPIRequest($endpoint, $method = 'GET', $data = null) {
+//     // Replace with your HubSpot API key or OAuth token
+//     $apiKey = 'pat-na1-e1f175c0-93c4-42d7-9135-d2d2ecbc743d';
+//     // Create cURL handle
+//     $ch = curl_init();
+//     // Set cURL options
+//     $curlOptions = array(
+//         CURLOPT_URL => $endpoint,
+//         CURLOPT_RETURNTRANSFER => true,
+//         CURLOPT_HTTPHEADER => array(
+//             'Authorization: Bearer ' . $apiKey,
+//             'Content-Type: application/json',
+//         ),
+//     );
+//     if ($method === 'POST' && $data !== null) {
+//         $curlOptions[CURLOPT_CUSTOMREQUEST] = 'POST';
+//         $curlOptions[CURLOPT_POSTFIELDS] = json_encode($data);
+//     }
+//     curl_setopt_array($ch, $curlOptions);
+//     // Execute cURL request
+//     $response = curl_exec($ch);
+//     // Check for cURL errors
+//     if (curl_errno($ch)) {
+//         echo 'cURL Error: ' . curl_error($ch);
+//         return false;
+//     }
+//     // Close cURL handle
+//     curl_close($ch);
+//     // Parse the JSON response
+//     $responseData = json_decode($response, true);
+//     if (isset($responseData)) {
+//         return $responseData; // Return the response data
+//     } else {
+//         echo 'Error making HubSpot API request. Response: ' . $response;
+//         return false;
+//     }
+// }
 
 function ezidebitPaymentsFromThreeDaysAgo() {
     // Get the current date
@@ -692,18 +698,66 @@ function ezidebitPaymentsFromThreeDaysAgo() {
         'PaymentMethod' => 'ALL',
         'PaymentSource' => 'ALL',
         'DateFrom' => $threeDaysAgo,
-        'DateTo' => $currentDate
+        'DateField' => 'PAYMENT'
     ]);
-    // Check if the Ezidebit API call was successful
     if ($ezidebit_response && isset($ezidebit_response->GetPaymentsResult->Data->Payment)) {
         $payments = $ezidebit_response->GetPaymentsResult->Data->Payment;
-        return array(
-            'EzidebitCustomerID' => $payments->EzidebitCustomerID,
-            'PaymentAmount' => $payments->PaymentAmount,
-            'PaymentStatus' => $payments->PaymentStatus,
-        );
+        // Initialize an array to store payment details for all payments
+        $paymentDetails = array();
+        foreach ($payments as $payment) {
+            $paymentDetail = array(
+                'EzidebitCustomerID' => $payment->EzidebitCustomerID,
+                'PaymentAmount' => $payment->PaymentAmount,
+                'PaymentStatus' => $payment->PaymentStatus,
+            );
+            // Add the payment detail to the array
+            $paymentDetails[] = $paymentDetail;
+        }
+        return $paymentDetails;
     } else {
         return false; // API call failed or response format is not as expected
+    }    
+}
+
+function testUpdateThreeDaysAgo() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'deals_info'; // Adjust the table name as needed
+    $payment_references = $wpdb->get_results("SELECT hubspot_deal_id, payment_reference, payment_status FROM $table_name", ARRAY_A);
+    // Call the Ezidebit function to get payments
+    $ezidebitPayments = ezidebitPaymentsFromThreeDaysAgo();
+    if ($ezidebitPayments !== false) {
+        $dealUpdates = array(); // Initialize an array to store deal updates
+        foreach ($payment_references as $row) {
+            $payment_reference = $row['payment_reference'];
+            $payment_status = $row['payment_status'];
+            foreach ($ezidebitPayments as $payment) {
+                if ($payment_reference === $payment['EzidebitCustomerID']) {
+                // Update payment_status in wp_deals_info
+                $new_payment_status = $payment['PaymentStatus'];
+                $wpdb->update(
+                    $table_name,
+                    array('payment_status' => $new_payment_status),
+                    array('payment_reference' => $payment_reference)
+                );
+                // Prepare deal update for HubSpot
+                $dealUpdates[] = array(
+                    'id' => $hubspot_deal_id, // Replace with your HubSpot deal ID
+                    'properties' => array(
+                        array(
+                            'name' => 'payment_status', // Replace with your HubSpot property name
+                            'value' => $new_payment_status,
+                        ),
+                    ),
+                );
+            }
+        }
+    }
+        // Update deals in HubSpot
+        if (!empty($dealUpdates)) {
+            updateHubSpotDeals($dealUpdates);
+        }
+    } else {
+        echo 'Ezidebit API call failed or response format is not as expected.';
     }
 }
 

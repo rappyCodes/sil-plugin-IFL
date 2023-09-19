@@ -62,5 +62,29 @@
     "payment_frequency": "6 Monthly",
     "renewal_frequency": 2,
     "hubspot_deal_id": 14788297383
+  },
+  {
+    "clickup_task_id": "z74nm7",
+    "sale_date": "Monday, November 23rd 2020",
+    "payment_reference": "GMB_ST_06_2020",
+    "payment_frequency": "6 Monthly",
+    "renewal_frequency": 2,
+    "hubspot_deal_id": 14788362357
+  },
+  {
+    "clickup_task_id": "z74nmf",
+    "sale_date": "Monday, May 22nd 2017",
+    "payment_reference": "GMB - LEA11165",
+    "payment_frequency": "Yearly",
+    "renewal_frequency": 1,
+    "hubspot_deal_id": 14788275991
+  },
+  {
+    "clickup_task_id": "z74nnw",
+    "sale_date": "Monday, May 27th 2019",
+    "payment_reference": "JKLMNOPQRSTUVA",
+    "payment_frequency": "Yearly",
+    "renewal_frequency": 1,
+    "hubspot_deal_id": 14788379529
   }
 ]
